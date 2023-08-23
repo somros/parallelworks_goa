@@ -12,7 +12,7 @@ library(viridis)
 grps <- read.csv('../data/GOA_Groups.csv')
 
 # list all csv files we need to read
-f_files <- list.files('../output_R/', recursive = T, full.names = T)
+f_files <- list.files('../output_R/', pattern = '.csv', recursive = T, full.names = T)
 
 # read all csv files
 f_ls <- list()
