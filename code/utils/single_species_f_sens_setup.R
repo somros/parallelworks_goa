@@ -1,31 +1,79 @@
 # 8/21/2023
 # Alberto Rovellini
 # Create a series of harvest.prm files where mFC for one species changes
-# This is for the single-sepcies F testing
+# This is for the single-species F testing
+# Do it on Tier 3 species to start
 # For now, we only have one fleet, so only the first value of the mFC vector is of interest
+library(readxl)
+library(tidyverse)
 
-# make mFC vectors based on following range of F:
-# F = 0, 0.05, 0.1, 0.15, 0.2, 0.3, 0.5, 0.75, 1, 1.25, 1.5, 2
+nfleet <- 33 # how many fleets in the harvest.prm file?
+select <- dplyr::select
+
+# make mFC vectors based on a range of F:
+# start from 0 and go up to 2*FOFL - test 10 values (closer together the closer to 0 we are?)
+# what to do with imposed and realized f?
 
 # Formula for mFC is mfc = 1-exp(-F / 365)
 
 #f_vals <- c(0.00, 0.05, 0.10, 0.15, 0.20, 0.30, 0.50, 0.75, 1.00, 1.25, 1.50, 2.00)
-f_vals <- c(0.00, 0.10, 0.20, 0.50, 0.75, 1.00) # strating simple for PW testing
-nfleet <- 33 # how many fleets in the harvest.prm file?
+#f_vals <- c(0.00, 0.10, 0.20, 0.50, 0.75, 1.00) # strating simple for PW testing
+# read FOFL table
+# read in MSY information (from FMP)
+f_cap <- read_xlsx('extra/msy.xlsx', sheet = 1, range = 'A3:J19') %>%
+  select(Stock, FOFL) %>%
+  mutate(Code = c('POL','COD','SBF','FFS','FFS','FFS','FFS','FFD',
+                  'REX','REX','ATF','FHS','POP','RFS','RFS','RFP')) %>%
+  group_by(Code) %>%
+  summarise(FOFL = mean(FOFL)) %>%
+  ungroup() %>%
+  mutate(cap = 2*FOFL) %>%
+  select(-FOFL)
 
-mfc_vals <- 1-exp(-f_vals / 365)
-# 0.0000000000 0.0001369769 0.0002739351 0.0004108745 0.0005477951 0.0008215801 0.0013689252 0.0020526849 0.0027359764 0.0034188001 0.0041011562 0.0054644672
-# 0.0000000000 0.0002739351 0.0005477951 0.0013689252 0.0020526849 0.0027359764 # for PW testing
+# add halibut (2M)
+f_cap <- rbind(f_cap, data.frame('Code'='HAL', cap = 0.4)) # 0.2*2
+species_to_test <- unique(f_cap$Code)
+
+# make range of values, stored in a matrix
+n_f <- 8
+mfc_tab <- f_tab <- matrix(NA, nrow = length(species_to_test), ncol = n_f)
+ 
+for(i in 1:length(species_to_test)){
+  sp <- species_to_test[i]
+  f <- f_cap %>% filter(Code == sp) %>% pull(cap)
+  fvec <- seq(0,f,length.out=n_f)
+  mfcvec <- 1-exp(-fvec / 365)
+  mfcrange <- matrix(mfcvec, nrow = 1)
+
+  # store
+  mfc_tab[i,] <- mfcrange
+  
+  # also make df with F values, we need to store it for plotting
+  frange <- matrix(fvec, nrow = 1)
+  
+  # store
+  f_tab[i,] <- frange
+}
+
+# set names
+mfc_tab <- mfc_tab %>% 
+  data.frame() %>% 
+  mutate(Code = species_to_test) %>%
+  set_names(c(1:8, 'Code'))
+
+f_tab <- f_tab %>% 
+  data.frame() %>% 
+  mutate(Code = species_to_test) %>%
+  set_names(c(1:8, 'Code'))
+
 #prm_file <- 'data/GOA_harvest_background.prm'
 prm_file <- 'GOA_harvest_background.prm'
 prm_vals <- readLines(prm_file)
 
-species_to_test <- c('COD', 'POL')
-
 # do for each species
 for(sp in species_to_test){
   
-  for(f in 1:length(mfc_vals)){
+  for(f in 1:n_f){
     
     # create file
     #newfile <- paste0('output/f_sens/GOA_harvest_', sp, '_', f, '.prm')
@@ -34,11 +82,12 @@ for(sp in species_to_test){
     file.create(newfile)
     
     this_sp <- sp
+    this_mfc <- mfc_tab %>% filter(Code == sp) %>% pull(as.character(f))
     
     # find the line that has the mFC vector for the species of interest
     this_line <- grep(paste0('mFC_',this_sp), prm_vals) + 1
     
-    new_mFC_vector <- paste(as.character(c(mfc_vals[f], rep(0, nfleet-1))), collapse = ' ')
+    new_mFC_vector <- paste(as.character(c(this_mfc, rep(0, nfleet-1))), collapse = ' ')
     
     # make a new harvest.prm object and modify it
     prm_new <- prm_vals

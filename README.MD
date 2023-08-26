@@ -2,6 +2,12 @@
 
 These are notes to set up a Parallel Works environment run the Atlantis GOA model. This is based on notes from [Andy Beet and Joe Caracappa](https://github.com/NOAA-EDAB/neus-atlantis/wiki/Cloud-setup) and from [Hem Nalini Morzaria-Luna](https://github.com/hmorzaria/psatlantismodelupdates/wiki/Parallel-works), with modifications.
 
+## Configuration
+
+For the controller node, a low-spec machine like Standard_D4_v3 (4 vCPUs, 16 GB Memory, amd64) will be fine. For the compute and process partitions, we need to request an instance that can accommodate the job at hand. For 96 runs, an option can be Standard_HB120rs_v2 (120 vCPUs, 456 GB Memory, amd64). 1 node would be fine for 96 runs (Max Nodes is the parameter for how many of these machines you want, not the number of cores). For more runs you'd need to request more nodes accordingly in the Definition page of the resource. 
+
+The parameters in the call to the slurm job are also important for correct allocation (see below).
+
 ## Snapshot
 
 What worked on my cluster was the following snapshot:
@@ -112,7 +118,7 @@ This recipe is used to create the container `atlantis6665.sif` by running `sudo 
 
 ## Slurm job
 
-I set up a slurm batch job named `batchjob.sh` which is hosted in `/contrib/atlantisCode` and has the following shape (for 12 runs):
+I set up a slurm batch job named `batchjob.sh` which is hosted in `/contrib/atlantisCode` and has the following shape (for 96 runs):
 
 ```
 #!/bin/bash
@@ -120,14 +126,16 @@ I set up a slurm batch job named `batchjob.sh` which is hosted in `/contrib/atla
 #SBATCH --mail-user=alberto.rovellini@noaa.gov
 #SBATCH --nodes=1
 #SBATCH --partition=compute
-#SBATCH --array=1-12
+#SBATCH --array=1-96
 
 sudo mkdir -p /contrib/$USER/slurm_array/out$SLURM_ARRAY_TASK_ID
 
 sudo singularity exec --bind /contrib/atlantis_goa/currentVersion:/app/model,/contrib/$USER/slurm_array/out$SLURM_ARRAY_TASK_ID:/app/model/output /contrib/atlantisCode/atlantis6665.sif /app/model/runGOA_Test_v0_$SLURM_ARRAY_TASK_ID.sh
 
 ```
-This points to individual `runGOA_Test_v0_xxx.sh` bash scripts to run Atlantis, one per run. They are all in `/contrib/atlantis_goa/currentVersion/` and they have this shape:
+If we want to run more simulations or if the instance requested for the compute partition has fewer cores than 96, we'd need to call more nodes or else jobs will be queued until cores are becoming free.
+
+This slurm call points to individual `runGOA_Test_v0_xxx.sh` bash scripts to run Atlantis, one per run. They are all in `/contrib/atlantis_goa/currentVersion/` and they have this shape:
 
 ```
 #!/bin/bash
@@ -137,7 +145,7 @@ cd /app/model
 atlantisMerged -i GOA_cb_summer.nc  0 -o output_COD_1.nc -r GOA_run.prm -f GOA_force.prm -p GOA_physics.prm -b GOAbioparam_test.prm -h GOA_harvest_COD_1.prm -m GOAMigrations.csv -s GOA_Groups.csv -q GOA_fisheries.csv -d output
 
 ```
-Each of these 12 points to a different `harvest.prm` file and names the output files differently, other than that they are identical. They are all created automatically (see code in `code/utils/single_species_f_sens_setup.R`).
+Each of these 96 points to a different `harvest.prm` file and names the output files differently, other than that they are identical. They are all created automatically (see code in `code/utils/single_species_f_sens_setup.R`).
 
 ## Outputs
 
