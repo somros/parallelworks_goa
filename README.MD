@@ -150,3 +150,20 @@ Each of these 96 points to a different `harvest.prm` file and names the output f
 ## Outputs
 
 Output of the Atlantis runs are stored in the individual containers in the `output` folder, but slurm copies them when the run is done to `/contrib/Alberto.Rovellini/slurm_array/outxxx`, where `outxxx` are individual output folders that are created when the slurm job is run. 
+
+## Processing
+
+Once the output of each run is created, it is then processed with the script named `f_processing_ssb.R`, which pulls biomass and catch at the end of the run, calculated F based on the first year of fishing, and organizes this information into one CSV file per run. These are done in parallel with this code:
+
+```
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --partition=process
+#SBATCH --array=1-96
+
+mkdir output_R
+
+Rscript --no-restore --no-save /contrib/$USER/code/f_processing_ssb.R out$SLURM_ARRAY_TASK_ID
+```
+
+When these are created, I push them to GitHub from PW, and they can be plotted with the `yield_curves.R` script (and variations thereof) to produce SSB and yield curves for levels of F. 
